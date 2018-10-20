@@ -1,12 +1,16 @@
 import { LeftListItem } from './components/LeftListItem';
-import { ACTIVE_CLASSNAME, DISPLAY_BLOCK, DISPLAY_NONE } from './const';
-import { addClass, isScrollBottom, isUrl, protectFromXSS, removeClass } from './utils';
+import { ACTIVE_CLASSNAME, body, DISPLAY_BLOCK, DISPLAY_NONE } from './const';
+import { addClass, appendToFirst, errorAlert, isScrollBottom, isUrl, protectFromXSS, removeClass } from './utils';
+import { Spinner } from './components/Spinner';
+import { OpenChannelList } from './components/OpenChannelList';
 import { SendBirdAction } from './SendBirdAction';
 import { UserList } from './components/UserList';
 import { Chat } from './Chat';
-import { Spinner } from './components/Spinner';
+import { OpenChannelCreateModal } from './components/OpenChannelCreateModal';
 
-import SyncManager from './manager/src/syncManager';
+const openChannelBtn = document.querySelector('#open_chat');
+const openChannelCreateBtn = document.querySelector('#open_chat_add');
+const groupChannelCreateBtn = document.querySelector('#group_chat_add');
 
 let instance = null;
 
@@ -15,111 +19,37 @@ class ChatLeftMenu {
     if (instance) {
       return instance;
     }
-    this.activeChannelUrl = null;
 
-    const action = new SendBirdAction();
-    const query = action.sb.GroupChannel.createMyGroupChannelListQuery();
-    query.limit = 50;
-    query.includeEmpty = false;
-    query.order = 'latest_last_message';
-
-    const manager = new SyncManager.Channel(action.sb);
-    this.channelCollection = manager.createMyGroupChannelCollection(query);
-    this.channelCollection.subscribe('chat_left_menu_group_channel', changeLog => {
-      const channel = changeLog.item;
-      switch(changeLog.action) {
-        case 'insert': {
-          const index = this.channelCollection.findIndex(channel, this.channelCollection.channels);
-          const handler = () => {
-            Chat.getInstance().render(channel.url, false);
-            this.activeChannelUrl = channel.url;
-          };
-          const item = new LeftListItem({ channel, handler });
-          if(index < this.groupChannelList.childNodes.length - 1) {
-            this.groupChannelList.insertBefore(item.element, this.groupChannelList.childNodes[index]);
-          } else {
-            this.groupChannelList.appendChild(item.element);
-          }
-          LeftListItem.updateUnreadCount();
-          this.toggleGroupChannelDefaultItem();
-          if(this.activeChannelUrl === channel.url) {
-            this.activeChannelItem(channel.url);
-          }
-          break;
-        }
-        case 'update': {
-          const item = this.getItem(channel.url);
-          const handler = () => {
-            Chat.getInstance().render(channel.url, false);
-            this.activeChannelUrl = channel.url;
-          };
-          const newItem = new LeftListItem({ channel, handler });
-          this.groupChannelList.replaceChild(newItem.element, item);
-          if(this.activeChannelUrl === channel.url) {
-            this.activeChannelItem(channel.url);
-          }
-          LeftListItem.updateUnreadCount();
-          break;
-        }
-        case 'move': {
-          const previousElement = this.getItem(channel.url);
-          this.groupChannelList.removeChild(previousElement);
-
-          const handler = () => {
-            Chat.getInstance().render(channel.url, false);
-            this.activeChannelUrl = channel.url;
-          };
-          const newItem = new LeftListItem({ channel, handler });
-          const index = this.channelCollection.findIndex(channel, this.channelCollection.channels);
-          if(index < this.groupChannelList.childNodes.length - 1) {
-            this.groupChannelList.insertBefore(newItem.element, this.groupChannelList.childNodes[index]);
-          } else {
-            this.groupChannelList.appendChild(newItem.element);
-          }
-          if(this.activeChannelUrl === channel.url) {
-            this.activeChannelItem(channel.url);
-          }
-          LeftListItem.updateUnreadCount();
-          break;
-        }
-        case 'remove': {
-          if(this.activeChannelUrl === channel.url) {
-            this.activeChannelUrl = null;
-            Chat.getInstance().render();
-          }
-          const element = this.getItem(channel.url);
-          this.groupChannelList.removeChild(element);
-          this.toggleGroupChannelDefaultItem();
-          break;
-        }
-        case 'clear': {
-          if(this.activeChannelUrl) {
-            Chat.getInstance().render();
-          }
-          this.activeChannelUrl = null;
-          const elements = this.groupChannelList.getElementsByClassName(LeftListItem.getItemRootClassName());
-          for (let i in elements) {
-            this.groupChannelList.removeChild(elements[i]);
-          }
-          this.toggleGroupChannelDefaultItem();
-          break;
-        }
-      }
-    });
-
+    this.openChannelList = document.getElementById('open_list');
+    this.openChannelDefaultItem = document.getElementById('default_item_open');
     this.groupChannelList = document.getElementById('group_list');
     this.groupChannelList.addEventListener('scroll', () => {
       if (isScrollBottom(this.groupChannelList)) {
-        this.loadGroupChannelList();
+        this.getGroupChannelList();
       }
     });
     this.groupChannelDefaultItem = document.getElementById('default_item_group');
-    
-    const groupChannelCreateBtn = document.getElementById('group_chat_add');
+    this._addEvent();
+    instance = this;
+  }
+
+  _addEvent() {
+    openChannelBtn.addEventListener('click', () => {
+      OpenChannelList.getInstance().render();
+    });
+
+    openChannelCreateBtn.addEventListener('click', () => {
+      const title = 'Create Open Channel';
+      const description =
+        'Open Channel is a public chat. In this channel type, anyone can enter and participate in the chat without permission.';
+      const submitText = 'CREATE';
+      const openChannelCreateModal = new OpenChannelCreateModal({ title, description, submitText });
+      openChannelCreateModal.render();
+    });
+
     groupChannelCreateBtn.addEventListener('click', () => {
       UserList.getInstance().render();
     });
-    instance = this;
   }
 
   updateUserInfo(user) {
@@ -132,34 +62,173 @@ class ChatLeftMenu {
     nicknameEl.innerHTML = protectFromXSS(user.nickname);
   }
 
-  loadGroupChannelList() {
-    Spinner.start(document.body);
-    this.channelCollection.loadChannels(() => {
-      Spinner.remove();
-      this.toggleGroupChannelDefaultItem();
-    });
+  /**
+   * Item
+   */
+  getChannelItem(channelUrl) {
+    const openItems = this.openChannelList.getElementsByClassName(LeftListItem.getItemRootClassName());
+    const groupItems = this.groupChannelList.getElementsByClassName(LeftListItem.getItemRootClassName());
+    const checkList = [...openItems, ...groupItems];
+    for (let i = 0; i < checkList.length; i++) {
+      if (checkList[i].id === channelUrl) {
+        return checkList[i];
+      }
+    }
+    return null;
   }
+
+  activeChannelItem(channelUrl) {
+    const openItems = this.openChannelList.getElementsByClassName(LeftListItem.getItemRootClassName());
+    const groupItems = this.groupChannelList.getElementsByClassName(LeftListItem.getItemRootClassName());
+    const checkList = [...openItems, ...groupItems];
+    for (let i = 0; i < checkList.length; i++) {
+      checkList[i].id === channelUrl
+        ? addClass(checkList[i], ACTIVE_CLASSNAME)
+        : removeClass(checkList[i], ACTIVE_CLASSNAME);
+    }
+  }
+
   getItem(elementId) {
+    const openChannelItems = this.openChannelList.getElementsByClassName(LeftListItem.getItemRootClassName());
+    for (let i = 0; i < openChannelItems.length; i++) {
+      if (openChannelItems[i].id === elementId) {
+        return openChannelItems[i];
+      }
+    }
+
     const groupChannelItems = this.groupChannelList.getElementsByClassName(LeftListItem.getItemRootClassName());
     for (let i = 0; i < groupChannelItems.length; i++) {
       if (groupChannelItems[i].id === elementId) {
         return groupChannelItems[i];
       }
     }
+
     return null;
   }
-  activeChannelItem(channelUrl) {
-    const groupItems = this.groupChannelList.getElementsByClassName(LeftListItem.getItemRootClassName());
-    for (let i = 0; i < groupItems.length; i++) {
-      groupItems[i].id === channelUrl
-        ? addClass(groupItems[i], ACTIVE_CLASSNAME)
-        : removeClass(groupItems[i], ACTIVE_CLASSNAME);
+
+  updateItem(channel, isFirst = false) {
+    const item = this.getItem(channel.url);
+    const handler = () => {
+      Chat.getInstance().render(channel.url, false);
+      ChatLeftMenu.getInstance().activeChannelItem(channel.url);
+    };
+    const newItem = new LeftListItem({ channel, handler });
+    const parentNode = this.groupChannelList;
+    if (isFirst) {
+      if (item) {
+        parentNode.removeChild(item);
+      }
+      appendToFirst(parentNode, newItem.element);
+    } else {
+      parentNode.replaceChild(newItem.element, item);
+    }
+    LeftListItem.updateUnreadCount();
+  }
+
+  /**
+   * Open Channel
+   */
+  toggleOpenChannelDefaultItem() {
+    this.openChannelList.getElementsByClassName(LeftListItem.getItemRootClassName()).length > 0
+      ? (this.openChannelDefaultItem.style.display = DISPLAY_NONE)
+      : (this.openChannelDefaultItem.style.display = DISPLAY_BLOCK);
+  }
+
+  addOpenChannelItem(element) {
+    if (!this.openChannelList.contains(element)) {
+      this.openChannelList.appendChild(element);
+    }
+    this.toggleOpenChannelDefaultItem();
+  }
+
+  removeOpenChannelItem(elementId) {
+    const removeEl = this.getItem(elementId);
+    if (removeEl) {
+      this.openChannelList.removeChild(removeEl);
+    }
+    this.toggleOpenChannelDefaultItem();
+  }
+
+  /**
+   * Group Channel
+   */
+  getGroupChannelList(isInit = false) {
+    Spinner.start(body);
+    SendBirdAction.getInstance()
+      .getGroupChannelList(isInit)
+      .then(groupChannelList => {
+        this.toggleGroupChannelDefaultItem(groupChannelList);
+        groupChannelList.forEach(channel => {
+          const handler = () => {
+            Chat.getInstance().render(channel.url, false);
+            ChatLeftMenu.getInstance().activeChannelItem(channel.url);
+          };
+          const item = new LeftListItem({ channel, handler });
+          this.groupChannelList.appendChild(item.element);
+          LeftListItem.updateUnreadCount();
+        });
+        Spinner.remove();
+      })
+      .catch(error => {
+        errorAlert(error.message);
+      });
+  }
+
+  toggleGroupChannelDefaultItem(items) {
+    if (items) {
+      this.groupChannelDefaultItem.style.display = items && items.length > 0 ? DISPLAY_NONE : DISPLAY_BLOCK;
+    } else {
+      this.groupChannelList.getElementsByClassName(LeftListItem.getItemRootClassName()).length > 0
+        ? (this.groupChannelDefaultItem.style.display = DISPLAY_NONE)
+        : (this.groupChannelDefaultItem.style.display = DISPLAY_BLOCK);
     }
   }
-  toggleGroupChannelDefaultItem() {
-    this.groupChannelList.getElementsByClassName(LeftListItem.getItemRootClassName()).length > 0
-      ? (this.groupChannelDefaultItem.style.display = DISPLAY_NONE)
-      : (this.groupChannelDefaultItem.style.display = DISPLAY_BLOCK);
+
+  addGroupChannelItem(element, isFirst = false) {
+    const listItems = this.groupChannelList.childNodes;
+    let isExist = false;
+    for (let i = 0; i < listItems.length; i++) {
+      if (listItems[i].id === element.id) {
+        isExist = true;
+      }
+    }
+    if (isExist) {
+      SendBirdAction.getInstance()
+        .getChannel(element.id, false)
+        .then(channel => {
+          this.updateItem(channel);
+        })
+        .catch(error => {
+          errorAlert(error.message);
+        });
+    } else {
+      if (isFirst) {
+        appendToFirst(this.groupChannelList, element);
+      } else {
+        this.groupChannelList.appendChild(element);
+      }
+    }
+    LeftListItem.updateUnreadCount();
+    this.toggleGroupChannelDefaultItem();
+  }
+
+  removeGroupChannelItem(elementId) {
+    const removeEl = this.getItem(elementId);
+    if (removeEl) {
+      this.groupChannelList.removeChild(removeEl);
+    }
+    this.toggleGroupChannelDefaultItem();
+  }
+
+  clear() {
+    const openItems = this.openChannelList.getElementsByClassName(LeftListItem.getItemRootClassName());
+    const groupItems = this.groupChannelList.getElementsByClassName(LeftListItem.getItemRootClassName());
+    const removeItems = [...openItems, ...groupItems];
+    for (let i = 0; i < removeItems.length; i++) {
+      removeItems[i].parentNode.removeChild(removeItems[i]);
+    }
+    this.toggleOpenChannelDefaultItem();
+    this.toggleGroupChannelDefaultItem();
   }
 
   static getInstance() {

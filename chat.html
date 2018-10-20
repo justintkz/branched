@@ -12,7 +12,7 @@
     rel='stylesheet' type='text/css'>
 
   <link rel="stylesheet" href="dist/sample.main.css">
-  <title>Basic Sample with SyncManager | SendBird</title>
+  <title>Basic Sample | SendBird</title>
 </head>
 
 <body>
@@ -28,11 +28,20 @@
       </div>
       <div class="body-left-list">
         <div class="chat-type">
+          <div class="chat-type-title" id="open_chat">OPEN CHAT</div>
+          <div>
+            <div class="icon-create-chat" id="open_chat_add"></div>
+          </div>
+        </div>
+        <div id="open_list" class="chat-list">
+          <div id="default_item_open" class="default-item">Start by selecting or creating a channel.</div>
+        </div>
+        <div class="chat-type">
           <div>GROUP CHAT</div>
           <div>
             <div class="icon-create-chat" id="group_chat_add"></div>
           </div>
-        </div>    
+        </div>
         <div id="group_list" class="chat-list chat-list-group">
           <div id="default_item_group" class="default-item">Start by inviting user to create a channel.</div>
         </div>

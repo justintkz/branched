@@ -1,5 +1,5 @@
-import { uuid4 } from './utils';
 import SendBird from 'sendbird';
+import { uuid4 } from './utils';
 
 class SendBirdEvent {
   constructor() {
@@ -34,6 +34,11 @@ class SendBirdEvent {
     handler.onChannelHidden = groupChannel => {
       if (this.onChannelHidden) {
         this.onChannelHidden(groupChannel);
+      }
+    };
+    handler.onUserEntered = (openChannel, user) => {
+      if (this.onUserEntered) {
+        this.onUserEntered(openChannel, user);
       }
     };
     this.sb.addChannelHandler(this.key, handler);

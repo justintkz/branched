@@ -1,8 +1,6 @@
-
+import SendBird from 'sendbird';
 import { APP_ID as appId } from './const';
 import { isNull } from './utils';
-
-import SendBird from 'sendbird';
 
 let instance = null;
 
@@ -13,6 +11,7 @@ class SendBirdAction {
     }
     this.sb = new SendBird({ appId });
     this.userQuery = null;
+    this.openChannelQuery = null;
     this.groupChannelQuery = null;
     this.previousMessageQuery = null;
     this.participantQuery = null;
@@ -109,10 +108,98 @@ class SendBirdAction {
   /**
    * Channel
    */
-  getChannel(channelUrl) {
+  getChannel(channelUrl, isOpenChannel = true) {
     return new Promise((resolve, reject) => {
-      this.sb.GroupChannel.getChannel(channelUrl, (groupChannel, error) => {
-        error ? reject(error) : resolve(groupChannel);
+      if (isOpenChannel) {
+        this.sb.OpenChannel.getChannel(channelUrl, (openChannel, error) => {
+          error ? reject(error) : resolve(openChannel);
+        });
+      } else {
+        this.sb.GroupChannel.getChannel(channelUrl, (groupChannel, error) => {
+          error ? reject(error) : resolve(groupChannel);
+        });
+      }
+    });
+  }
+
+  /**
+   * Open Channel
+   */
+  getOpenChannelList(isInit = false, urlKeyword = '') {
+    if (isInit || isNull(this.openChannelQuery)) {
+      this.openChannelQuery = new this.sb.OpenChannel.createOpenChannelListQuery();
+      this.openChannelQuery.limit = 20;
+      this.openChannelQuery.urlKeyword = urlKeyword;
+    }
+    return new Promise((resolve, reject) => {
+      if (this.openChannelQuery.hasNext && !this.openChannelQuery.isLoading) {
+        this.openChannelQuery.next((list, error) => {
+          error ? reject(error) : resolve(list);
+        });
+      } else {
+        resolve([]);
+      }
+    });
+  }
+
+  createOpenChannel(channelName) {
+    return new Promise((resolve, reject) => {
+      channelName
+        ? this.sb.OpenChannel.createChannel(channelName, null, null, (openChannel, error) => {
+            error ? reject(error) : resolve(openChannel);
+          })
+        : this.sb.OpenChannel.createChannel((openChannel, error) => {
+            error ? reject(error) : resolve(openChannel);
+          });
+    });
+  }
+
+  enter(channelUrl) {
+    return new Promise((resolve, reject) => {
+      this.sb.OpenChannel.getChannel(channelUrl, (openChannel, error) => {
+        if (error) {
+          reject(error);
+        } else {
+          openChannel.enter((response, error) => {
+            error ? reject(error) : resolve();
+          });
+        }
+      });
+    });
+  }
+
+  exit(channelUrl) {
+    return new Promise((resolve, reject) => {
+      this.sb.OpenChannel.getChannel(channelUrl, (openChannel, error) => {
+        if (error) {
+          reject(error);
+        } else {
+          openChannel.exit((response, error) => {
+            error ? reject(error) : resolve();
+          });
+        }
+      });
+    });
+  }
+
+  getParticipantList(channelUrl, isInit = false) {
+    return new Promise((resolve, reject) => {
+      this.sb.OpenChannel.getChannel(channelUrl, (openChannel, error) => {
+        if (error) {
+          reject(error);
+        } else {
+          if (isInit || isNull(this.participantQuery)) {
+            this.participantQuery = openChannel.createParticipantListQuery();
+            this.participantQuery.limit = 30;
+          }
+          if (this.participantQuery.hasNext && !this.participantQuery.isLoading) {
+            this.participantQuery.next((participantList, error) => {
+              error ? reject(error) : resolve(participantList);
+            });
+          } else {
+            resolve([]);
+          }
+        }
       });
     });
   }

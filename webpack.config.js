@@ -1,12 +1,12 @@
 'use strict';
 const path = require('path');
+const webpack = require('webpack');
 const ExtractTextPlugin = require('extract-text-webpack-plugin');
 
 const PRODUCTION = 'production';
 
 module.exports = () => {
   const config = {
-    mode: 'production',
     entry: {
       index: ['./src/js/index.js', './src/scss/index.scss'],
       main: ['./src/js/main.js', './src/scss/main.scss']
@@ -25,7 +25,6 @@ module.exports = () => {
       compress: true,
       port: 9000
     },
-    performance: { hints: false },
     module: {
       rules: [
         {

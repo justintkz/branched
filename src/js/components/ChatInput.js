@@ -13,8 +13,6 @@ class ChatInput {
   }
 
   _createElement(channel) {
-    const sendbirdAction = SendBirdAction.getInstance();
-    const chat = Chat.getInstance();
     const root = createDivEl({ className: styles['chat-input'] });
 
     this.typing = createDivEl({ className: styles['typing-field'] });
@@ -24,7 +22,9 @@ class ChatInput {
     file.className = styles['input-file'];
     file.for = FILE_ID;
     file.addEventListener('click', () => {
-      sendbirdAction.markAsRead(this.channel);
+      if (this.channel.isGroupChannel()) {
+        SendBirdAction.getInstance().markAsRead(this.channel);
+      }
     });
 
     const fileInput = document.createElement('input');
@@ -39,13 +39,11 @@ class ChatInput {
           file: sendFile,
           handler: (message, error) => {
             error
-              ? chat.main.body.removeMessage(message.reqId, true)
-              : chat.main.body.collection.appendMyMessage(message);
-            chat.main.body.scrollToBottom();
+              ? Chat.getInstance().main.removeMessage(tempMessage.reqId, true)
+              : Chat.getInstance().main.renderMessages([message]);
           }
         });
-        tempMessage.createdAt = new Date().getTime();
-        chat.main.body.collection.appendMyMessage(tempMessage);
+        Chat.getInstance().main.renderMessages([tempMessage]);
       }
     });
 
@@ -58,7 +56,9 @@ class ChatInput {
     this.input.className = styles['input-text-area'];
     this.input.placeholder = 'Write a chat...';
     this.input.addEventListener('click', () => {
-      sendbirdAction.markAsRead(this.channel);
+      if (this.channel.isGroupChannel()) {
+        SendBirdAction.getInstance().markAsRead(this.channel);
+      }
     });
     this.input.addEventListener('keypress', e => {
       if (e.keyCode === KEY_ENTER) {
@@ -72,19 +72,24 @@ class ChatInput {
               message,
               handler: (message, error) => {
                 error
-                  ? chat.main.body.removeMessage(tempMessage.reqId, true)
-                  : chat.main.body.collection.appendMyMessage(message);
-                chat.main.body.scrollToBottom();
+                  ? Chat.getInstance().main.removeMessage(tempMessage.reqId, true)
+                  : Chat.getInstance().main.renderMessages([message]);
               }
             });
-            chat.main.body.collection.appendMyMessage(tempMessage);
-            channel.endTyping();
+            Chat.getInstance().main.renderMessages([tempMessage]);
+            if (channel.isGroupChannel()) {
+              channel.endTyping();
+            }
           }
         } else {
-          channel.startTyping();
+          if (channel.isGroupChannel()) {
+            channel.startTyping();
+          }
         }
       } else {
-        channel.startTyping();
+        if (channel.isGroupChannel()) {
+          channel.startTyping();
+        }
       }
     });
     this.input.addEventListener('focusin', () => {

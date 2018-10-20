@@ -1,96 +1,37 @@
 import styles from '../../scss/chat-body.scss';
-import { createDivEl, getDataInElement, removeClass } from '../utils';
+import { appendToFirst, createDivEl, errorAlert, getDataInElement, isScrollBottom, removeClass } from '../utils';
 import { Message } from './Message';
 import { SendBirdAction } from '../SendBirdAction';
-import { MESSAGE_REQ_ID } from '../const';
 import { Spinner } from './Spinner';
-
-import SyncManager from '../manager/src/syncManager';
+import { MESSAGE_REQ_ID } from '../const';
 
 class ChatBody {
   constructor(channel) {
     this.channel = channel;
     this.readReceiptManageList = [];
     this.scrollHeight = 0;
-    this.collection = null;
-    this.limit = 50;
-    this.hasNext = true;
-    this.element = createDivEl({ className: styles['chat-body'] });
-    this._initElement();
+    this.element = this._createElement();
   }
-  
-  _initElement() {
-    const sendbirdAction = SendBirdAction.getInstance();
-    const manager = new SyncManager.Message(sendbirdAction.sb);
-    if(this.collection) {
-      manager.removeMessageCollection(this.collection);
-    }
-    this.collection = manager.createMessageCollection(this.channel, { limit: this.limit });
-    this.collection.subscribe('chat_body_message', changeLog => {
-      const messageElements = this.element.querySelectorAll('.chat-message');
-      const message = changeLog.item;
-      const keepScrollToBottom = this.element.scrollTop >= this.element.scrollHeight - this.element.offsetHeight;
-      switch(changeLog.action) {
-        case 'insert': {
-          const index = this.collection.findIndex(message, this.collection.messages);
-          if(index >= 0) {
-            const messageItem = new Message({ channel: this.channel, message });
-            if(index === this.collection.messages.length) {
-              this.element.appendChild(messageItem.element);
-            } else {
-              this.element.insertBefore(messageItem.element, messageElements[index]);
-            }
-            if ((message.isUserMessage() || message.isFileMessage()) && SendBirdAction.getInstance().isCurrentUser(message.sender)) {
-              this.readReceiptManage(message);
-            }
-          }
-          break;
-        }
-        case 'update': {
-          const messageItem = new Message({ channel: this.channel, message });
-          const currentItem = this._getItem(message.messageId, false);
-          const requestItem = message.reqId ? this._getItem(message.reqId, true) : null;
-          if(currentItem || requestItem) {
-            this.element.replaceChild(messageItem.element, requestItem ? requestItem : currentItem);
-          }
-          break;
-        }
-        case 'remove': {
-          this.removeMessage(message.messageId);
-          break;
-        }
-        case 'clear': {
-          while (this.element.firstChild) {
-            this.element.removeChild(this.element.firstChild);
-          }
-          break;
-        }
-      }
-      if(keepScrollToBottom) {
-        this.scrollToBottom();
-      }
-    });
 
-    this.element.addEventListener('scroll', () => {
-      if (this.element.scrollTop === 0 && this.hasNext) {
-        const currentMessageCount = this.collection.messages.length;
+  _createElement() {
+    const root = createDivEl({ className: styles['chat-body'] });
+    root.addEventListener('scroll', () => {
+      if (root.scrollTop === 0) {
+        Spinner.start(root);
         this.updateCurrentScrollHeight();
-        this.loadPreviousMessages(() => {
-          const fetchedMessageCount = this.collection.messages.length;
-          if(fetchedMessageCount - currentMessageCount < this.limit) {
-            this.hasNext = false;
-          }
-        });
+        SendBirdAction.getInstance()
+          .getMessageList(this.channel)
+          .then(messageList => {
+            messageList.reverse();
+            this.renderMessages(messageList, false, true);
+            Spinner.remove();
+          })
+          .catch(error => {
+            errorAlert(error.message);
+          });
       }
     });
-  }
-
-  loadPreviousMessages(callback) {
-    Spinner.start(this.element);
-    this.collection.loadPreviousMessages(() => {
-      Spinner.remove();
-      if(callback) callback();
-    });
+    return root;
   }
 
   scrollToBottom() {
@@ -156,6 +97,39 @@ class ChatBody {
       }
     }
     return null;
+  }
+
+  renderMessages(messageList, goToBottom = true, isPastMessage = false) {
+    messageList.forEach(message => {
+      const messageItem = new Message({ channel: this.channel, message });
+      const requestId = getDataInElement(messageItem.element, MESSAGE_REQ_ID)
+        ? getDataInElement(messageItem.element, MESSAGE_REQ_ID)
+        : '-1';
+      const requestItem = this._getItem(requestId, true);
+      const existItem = this._getItem(messageItem.element.id, false);
+      if (requestItem || existItem) {
+        this.element.replaceChild(messageItem.element, requestItem ? requestItem : existItem);
+      } else {
+        if (isPastMessage) {
+          appendToFirst(this.element, messageItem.element);
+          this.element.scrollTop = this.element.scrollHeight - this.scrollHeight;
+        } else {
+          const isBottom = isScrollBottom(this.element);
+          this.element.appendChild(messageItem.element);
+          if (isBottom) {
+            this.scrollToBottom();
+          }
+        }
+      }
+      if (
+        (message.isUserMessage() || message.isFileMessage()) &&
+        SendBirdAction.getInstance().isCurrentUser(message.sender) &&
+        this.channel.isGroupChannel()
+      ) {
+        this.readReceiptManage(message);
+      }
+    });
+    if (goToBottom) this.scrollToBottom();
   }
 
   removeMessage(messageId, isRequestId = false) {

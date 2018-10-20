@@ -1,5 +1,5 @@
-import { uuid4 } from './utils';
 import SendBird from 'sendbird';
+import { uuid4 } from './utils';
 
 let instance = null;
 

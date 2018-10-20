@@ -1,5 +1,5 @@
 import styles from '../../scss/chat-menu.scss';
-import { appendToFirst, createDivEl, errorAlert } from '../utils';
+import { appendToFirst, createDivEl, errorAlert, isScrollBottom } from '../utils';
 import { DISPLAY_FLEX, DISPLAY_NONE } from '../const';
 import { Spinner } from './Spinner';
 import { ChatUserItem } from './ChatUserItem';
@@ -38,7 +38,11 @@ class ChatMenu {
 
     this.list = createDivEl({ className: styles['list-body'] });
     this.list.addEventListener('scroll', () => {
-      if (this.type === Type.BLOCKED) {
+      if (this.type === Type.PARTICIPANTS) {
+        if (isScrollBottom(this.list)) {
+          this._getParticipantList(this.type);
+        }
+      } else if (this.type === Type.BLOCKED) {
         this._getBlockedList(this.type);
       }
     });
@@ -51,7 +55,7 @@ class ChatMenu {
     const usersItem = createDivEl({ className: styles['menu-item'] });
     const users = createDivEl({
       className: styles['menu-users'],
-      content: Type.MEMBERS
+      content: this.channel.isOpenChannel() ? Type.PARTICIPANTS : Type.MEMBERS
     });
     usersItem.appendChild(users);
     const arrowUser = createDivEl({ className: styles['menu-arrow'] });
@@ -74,6 +78,10 @@ class ChatMenu {
 
   _renderList(listTitle) {
     switch (listTitle) {
+      case Type.PARTICIPANTS:
+        this.type = Type.PARTICIPANTS;
+        this._getParticipantList(listTitle, true);
+        break;
       case Type.MEMBERS:
         this.type = Type.MEMBERS;
         this._getMemberList(listTitle);
@@ -85,6 +93,28 @@ class ChatMenu {
       default:
         this.titleText.innerHTML = '';
         break;
+    }
+  }
+
+  _getParticipantList(listTitle, isInit = false) {
+    if (this.channel.isOpenChannel()) {
+      Spinner.start(this.listElement);
+      if (isInit) {
+        this.titleText.innerHTML = listTitle;
+        this.listElement.style.display = DISPLAY_FLEX;
+      }
+      SendBirdAction.getInstance()
+        .getParticipantList(this.channel.url, isInit)
+        .then(participantList => {
+          participantList.forEach(user => {
+            const participantItem = new ChatUserItem({ user, hasEvent: false });
+            this.list.appendChild(participantItem.element);
+          });
+          Spinner.remove();
+        })
+        .catch(error => {
+          errorAlert(error.message);
+        });
     }
   }
 

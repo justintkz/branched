@@ -1,6 +1,7 @@
 import styles from '../../scss/modal.scss';
 import { createDivEl } from '../utils';
 import { Spinner } from './Spinner';
+import { body } from '../const';
 
 class Modal {
   constructor({ title, description, submitText }) {
@@ -47,14 +48,14 @@ class Modal {
   }
 
   close() {
-    if (document.body.contains(this.element)) {
-      document.body.removeChild(this.element);
+    if (body.contains(this.element)) {
+      body.removeChild(this.element);
     }
   }
 
   render() {
-    if (!document.body.querySelector(`.${styles['modal-root']}`)) {
-      document.body.appendChild(this.element);
+    if (!body.querySelector(`.${styles['modal-root']}`)) {
+      body.appendChild(this.element);
     }
   }
 }

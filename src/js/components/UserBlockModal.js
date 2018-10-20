@@ -21,19 +21,7 @@ class UserBlockModal extends Modal {
     this.isBlock = isBlock;
     this.user = user;
     this._createElement();
-    
-    this.submitHandler = () => {
-      SendBirdAction.getInstance()
-        .blockUser(this.user, this.isBlock)
-        .then(() => {
-          Chat.getInstance().main.updateBlockedList(this.user, this.isBlock);
-          Spinner.remove();
-          this.close();
-        })
-        .catch(error => {
-          errorAlert(error.message);
-        });
-    };
+    this._createHandler();
   }
 
   _createElement() {
@@ -46,6 +34,21 @@ class UserBlockModal extends Modal {
     content.appendChild(nickname);
 
     this.contentElement.appendChild(content);
+  }
+
+  _createHandler() {
+    this.submitHandler = () => {
+      SendBirdAction.getInstance()
+        .blockUser(this.user, this.isBlock)
+        .then(() => {
+          Chat.getInstance().main.updateBlockedList(this.user, this.isBlock);
+          Spinner.remove();
+          this.close();
+        })
+        .catch(error => {
+          errorAlert(error.message);
+        });
+    };
   }
 }
 

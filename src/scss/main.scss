@@ -41,7 +41,6 @@
       .icon-create-chat {
         width: 20px;
         height: 20px;
-        @include border-radius(4px);
         @include icon($ic-add-normal, 17px 17px, center center);
         @include hover {
           cursor: pointer;
@@ -54,8 +53,7 @@
         justify-content: space-between;
         font-family: $font-family-exo2;
         font-weight: 400;
-        font-size: 14px;
-        color:#9F8DC0;
+        font-size: 12px;
         line-height: 20px;
         padding: 8px 20px;
         & > .chat-type-title {

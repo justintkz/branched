@@ -4,8 +4,10 @@ import { List } from './List';
 import { Spinner } from './Spinner';
 import { SendBirdAction } from '../SendBirdAction';
 import { UserItem } from './UserItem';
+import { body as targetEl } from '../const';
 import { Chat } from '../Chat';
 import { ChatLeftMenu } from '../ChatLeftMenu';
+import { LeftListItem } from './LeftListItem';
 
 let instance = null;
 
@@ -35,10 +37,16 @@ class UserList extends List {
 
   _createChannel() {
     SendBirdAction.getInstance()
-    .createGroupChannel(this.selectedUserIds)
-    .then(channel => {
-        ChatLeftMenu.getInstance().activeChannelUrl = channel.url;
+      .createGroupChannel(this.selectedUserIds)
+      .then(channel => {
         Chat.getInstance().render(channel.url, false);
+        const handler = () => {
+          Chat.getInstance().render(channel.url, false);
+          ChatLeftMenu.getInstance().activeChannelItem(channel.url);
+        };
+        const item = new LeftListItem({ channel, handler });
+        ChatLeftMenu.getInstance().addGroupChannelItem(item.element, true);
+        ChatLeftMenu.getInstance().activeChannelItem(channel.url);
         Spinner.remove();
         this.close();
       })
@@ -110,9 +118,9 @@ class UserList extends List {
   }
 
   render(isInvite = false) {
-    if (!document.body.querySelector(`.${this.getRootClassName()}`)) {
+    if (!targetEl.querySelector(`.${this.getRootClassName()}`)) {
       this._updateCreateType(isInvite);
-      document.body.appendChild(this.element);
+      targetEl.appendChild(this.element);
       this._getUserList(true);
     }
   }

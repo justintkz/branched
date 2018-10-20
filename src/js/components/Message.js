@@ -21,7 +21,7 @@ class Message {
     } else if (this.message.isAdminMessage()) {
       return this._createAdminElement();
     } else {
-      // console.error('Message is invalid data.');
+      console.error('Message is invalid data.');
       return null;
     }
   }
@@ -92,12 +92,14 @@ class Message {
     });
     messageContent.appendChild(time);
 
-    const count = sendbirdAction.getReadReceipt(this.channel, this.message);
-    const read = createDivEl({
-      className: count ? [styles.read, styles.active] : styles.read,
-      content: count
-    });
-    messageContent.appendChild(read);
+    if (this.channel.isGroupChannel()) {
+      const count = sendbirdAction.getReadReceipt(this.channel, this.message);
+      const read = createDivEl({
+        className: count ? [styles.read, styles.active] : styles.read,
+        content: count
+      });
+      messageContent.appendChild(read);
+    }
 
     root.appendChild(messageContent);
     return root;

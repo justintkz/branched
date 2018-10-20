@@ -1,13 +1,13 @@
 import styles from '../scss/chat.scss';
 import { createDivEl, errorAlert } from './utils';
 import { SendBirdAction } from './SendBirdAction';
-import { SendBirdChatEvent } from './SendBirdChatEvent';
+import { Spinner } from './components/Spinner';
 import { ChatLeftMenu } from './ChatLeftMenu';
 import { ChatTopMenu } from './components/ChatTopMenu';
 import { ChatMain } from './components/ChatMain';
-import { Spinner } from './components/Spinner';
+import { SendBirdChatEvent } from './SendBirdChatEvent';
 
-import SyncManager from './manager/src/syncManager';
+const targetEl = document.querySelector('.body-center');
 
 let instance = null;
 
@@ -16,7 +16,6 @@ class Chat {
     if (instance) {
       return instance;
     }
-    this.body = document.querySelector('.body-center');
 
     this.channel = null;
     this.element = null;
@@ -40,7 +39,7 @@ class Chat {
       className: styles['content-desc'],
       content:
         'Create or select a channel to chat in.\n' +
-        'If you don\'t have a channel to participate,\n' +
+        "If you don't have a channel to participate,\n" +
         'go ahead and create your first channel now.'
     });
     content.appendChild(desc);
@@ -49,12 +48,12 @@ class Chat {
 
   renderEmptyElement() {
     this._removeChatElement();
-    this.body.appendChild(this.emptyElement);
+    targetEl.appendChild(this.emptyElement);
   }
 
   _removeEmptyElement() {
-    if (this.body.contains(this.emptyElement)) {
-      this.body.removeChild(this.emptyElement);
+    if (targetEl.contains(this.emptyElement)) {
+      targetEl.removeChild(this.emptyElement);
     }
   }
 
@@ -64,38 +63,66 @@ class Chat {
     this.top = new ChatTopMenu(channel);
     this.element.appendChild(this.top.element);
 
-    /// reset manager when ChatMain is obsolete
-    if(this.main && this.main.body && this.main.body.collection) {
-      const sendbirdAction = SendBirdAction.getInstance();
-      const manager = new SyncManager.Message(sendbirdAction.sb);
-      manager.removeMessageCollection(this.main.body.collection);
-    }
     this.main = new ChatMain(channel);
   }
 
   _addEventHandler() {
     const channelEvent = new SendBirdChatEvent();
-    channelEvent.onTypingStatusUpdated = groupChannel => {
-      if (this.channel.url === groupChannel.url) {
-        this.main.updateTyping(groupChannel.getTypingMembers());
+    channelEvent.onMessageReceived = (channel, message) => {
+      if (this.channel.url === channel.url) {
+        this.main.renderMessages([message], false);
       }
     };
+    channelEvent.onMessageUpdated = (channel, message) => {
+      if (this.channel.url === channel.url) {
+        this.main.renderMessages([message], false);
+      }
+    };
+    channelEvent.onMessageDeleted = (channel, messageId) => {
+      if (this.channel.url === channel.url) {
+        this.main.removeMessage(messageId, false);
+      }
+    };
+
+    if (this.channel.isGroupChannel()) {
+      channelEvent.onReadReceiptUpdated = groupChannel => {
+        if (this.channel.url === groupChannel.url) {
+          this.main.updateReadReceipt();
+        }
+      };
+      channelEvent.onTypingStatusUpdated = groupChannel => {
+        if (this.channel.url === groupChannel.url) {
+          this.main.updateTyping(groupChannel.getTypingMembers());
+        }
+      };
+    }
   }
 
-  _renderChatElement(channelUrl) {
-    Spinner.start(document.querySelector('.body-center'));
+  _renderChatElement(channelUrl, isOpenChannel = true) {
+    Spinner.start(targetEl);
     const sendbirdAction = SendBirdAction.getInstance();
     this._removeEmptyElement();
     this._removeChatElement();
     ChatLeftMenu.getInstance().activeChannelItem(channelUrl);
     sendbirdAction
-      .getChannel(channelUrl)
+      .getChannel(channelUrl, isOpenChannel)
       .then(channel => {
         this.channel = channel;
         this._addEventHandler();
         this._createChatElement(this.channel);
-        this.body.appendChild(this.element);
-        this.main.loadInitialMessages();
+        targetEl.appendChild(this.element);
+        sendbirdAction
+          .getMessageList(this.channel, true)
+          .then(messageList => {
+            this.main.renderMessages(messageList);
+            if (this.channel.isGroupChannel()) {
+              sendbirdAction.markAsRead(this.channel);
+            }
+            Spinner.remove();
+          })
+          .catch(error => {
+            errorAlert(error.message);
+          });
       })
       .catch(error => {
         errorAlert(error.message);
@@ -103,7 +130,7 @@ class Chat {
   }
 
   _removeChatElement() {
-    const chatElements = this.body.getElementsByClassName(styles['chat-root']);
+    const chatElements = targetEl.getElementsByClassName(styles['chat-root']);
     Array.prototype.slice.call(chatElements).forEach(chatEl => {
       chatEl.parentNode.removeChild(chatEl);
     });
@@ -120,8 +147,8 @@ class Chat {
     }
   }
 
-  render(channelUrl) {
-    channelUrl ? this._renderChatElement(channelUrl) : this.renderEmptyElement();
+  render(channelUrl, isOpenChannel = true) {
+    channelUrl ? this._renderChatElement(channelUrl, isOpenChannel) : this.renderEmptyElement();
   }
 
   refresh(channel) {
@@ -130,7 +157,7 @@ class Chat {
     this.renderEmptyElement();
     const reconnectChannel = channel ? channel : this.channel;
     if (reconnectChannel) {
-      this.render(reconnectChannel.url);
+      this.render(reconnectChannel.url, reconnectChannel.isOpenChannel());
     }
   }
 
